@@ -20,7 +20,7 @@
 
 ## 🚀 Запуск игры
 
-1. Перейдите на страницу GitHub Pages: https://github.com/sumrakdasha-jpg/mermaid-platformer-game  
+1. Перейдите на страницу GitHub Pages и скачайте файл `index.html` : https://github.com/sumrakdasha-jpg/mermaid-platformer-game  
 2. Или откройте файл `index.html` в браузере
 
 ## 🛠️ Технологии
