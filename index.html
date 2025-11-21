@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Русалочка: Спасение рыбок</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1a2980, #26d0ce);
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .game-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        #gameCanvas {
+            border: 3px solid #2c3e50;
+            border-radius: 10px;
+            background: #0a3d62;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        .ui-panel {
+            background: rgba(44, 62, 80, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 10px 0;
+            text-align: center;
+            min-width: 400px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 10px 0;
+        }
+        
+        .stat-item {
+            background: rgba(52, 152, 219, 0.3);
+            padding: 8px 15px;
+            border-radius: 5px;
+        }
+        
+        .instructions {
+            background: rgba(44, 62, 80, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 10px;
+            max-width: 600px;
+            text-align: center;
+        }
+        
+        h1 {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 10px;
+        }
+        
+        .game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐚 Русалочка: Спасение рыбок 🐠</h1>
+    
+    <div class="ui-panel">
+        <div class="stats">
+            <div class="stat-item">Спасено рыбок: <span id="fishCount">0</span>/5</div>
+            <div class="stat-item">Время: <span id="timer">60</span>с</div>
+            <div class="stat-item">Уровень: <span id="level">1</span></div>
+        </div>
+    </div>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <div id="gameOver" class="game-over">
+            <h2 id="gameOverTitle">Игра окончена!</h2>
+            <p id="gameOverMessage"></p>
+            <button onclick="restartGame()">Играть снова</button>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button onclick="moveMermaid('left')">⬅️ Влево</button>
+        <button onclick="moveMermaid('up')">⬆️ Вверх</button>
+        <button onclick="moveMermaid('down')">⬇️ Вниз</button>
+        <button onclick="moveMermaid('right')">➡️ Вправо</button>
+        <button onclick="pauseGame()" id="pauseBtn">⏸️ Пауза</button>
+    </div>
+    
+    <div class="instructions">
+        <p><strong>Управление:</strong> Используйте кнопки или стрелки на клавиатуре</p>
+        <p><strong>Цель:</strong> Спасите 5 рыбок, избегая врагов, прежде чем закончится время!</p>
+    </div>
+
+    <script>
+        class MermaidGame {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.mermaid = {
+                    x: 50,
+                    y: 250,
+                    width: 40,
+                    height: 40,
+                    speed: 5,
+                    color: '#e91e63'
+                };
+                this.fishes = [];
+                this.enemies = [];
+                this.collectedFish = 0;
+                this.totalFish = 5;
+                this.timeLeft = 60;
+                this.level = 1;
+                this.gameRunning = false;
+                this.gamePaused = false;
+                this.keys = {};
+                this.initializeGame();
+            }
+
+            initializeGame() {
+                this.createLevel();
+                this.setupControls();
+                this.gameRunning = true;
+                this.gameLoop = setInterval(() => this.update(), 1000/60);
+                this.timer = setInterval(() => {
+                    if (!this.gamePaused && this.gameRunning) {
+                        this.timeLeft--;
+                        document.getElementById('timer').textContent = this.timeLeft;
+                        if (this.timeLeft <= 0) {
+                            this.endGame(false);
+                        }
+                    }
+                }, 1000);
+            }
+
+            createLevel() {
+                this.fishes = [];
+                this.enemies = [];
+                
+                // Создание рыбок
+                for (let i = 0; i < this.totalFish; i++) {
+                    this.fishes.push({
+                        x: Math.random() * (this.canvas.width - 30) + 15,
+                        y: Math.random() * (this.canvas.height - 30) + 15,
+                        width: 25,
+                        height: 15,
+                        color: '#ffeb3b',
+                        collected: false
+                    });
+                }
+
+                // Создание врагов (акулы)
+                const enemyCount = 2 + this.level;
+                for (let i = 0; i < enemyCount; i++) {
+                    this.enemies.push({
+                        x: Math.random() * (this.canvas.width - 40),
+                        y: Math.random() * (this.canvas.height - 40),
+                        width: 50,
+                        height: 30,
+                        color: '#795548',
+                        speedX: (Math.random() - 0.5) * 4,
+                        speedY: (Math.random() - 0.5) * 4
+                    });
+                }
+            }
+
+            setupControls() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.key] = true;
+                });
+
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.key] = false;
+                });
+            }
+
+            update() {
+                if (!this.gameRunning || this.gamePaused) return;
+
+                this.moveMermaid();
+                this.moveEnemies();
+                this.checkCollisions();
+                this.draw();
+            }
+
+            moveMermaid() {
+                if (this.keys['ArrowLeft'] || this.keys['a']) {
+                    this.mermaid.x = Math.max(0, this.mermaid.x - this.mermaid.speed);
+                }
+                if (this.keys['ArrowRight'] || this.keys['d']) {
+                    this.mermaid.x = Math.min(this.canvas.width - this.mermaid.width, 
+                                            this.mermaid.x + this.mermaid.speed);
+                }
+                if (this.keys['ArrowUp'] || this.keys['w']) {
+                    this.mermaid.y = Math.max(0, this.mermaid.y - this.mermaid.speed);
+                }
+                if (this.keys['ArrowDown'] || this.keys['s']) {
+                    this.mermaid.y = Math.min(this.canvas.height - this.mermaid.height, 
+                                            this.mermaid.y + this.mermaid.speed);
+                }
+            }
+
+            moveEnemies() {
+                this.enemies.forEach(enemy => {
+                    enemy.x += enemy.speedX;
+                    enemy.y += enemy.speedY;
+
+                    // Отскок от границ
+                    if (enemy.x <= 0 || enemy.x >= this.canvas.width - enemy.width) {
+                        enemy.speedX *= -1;
+                    }
+                    if (enemy.y <= 0 || enemy.y >= this.canvas.height - enemy.height) {
+                        enemy.speedY *= -1;
+                    }
+                });
+            }
+
+            checkCollisions() {
+                // Проверка сбора рыбок
+                this.fishes.forEach(fish => {
+                    if (!fish.collected && 
+                        this.mermaid.x < fish.x + fish.width &&
+                        this.mermaid.x + this.mermaid.width > fish.x &&
+                        this.mermaid.y < fish.y + fish.height &&
+                        this.mermaid.y + this.mermaid.height > fish.y) {
+                        
+                        fish.collected = true;
+                        this.collectedFish++;
+                        document.getElementById('fishCount').textContent = this.collectedFish;
+                        
+                        if (this.collectedFish >= this.totalFish) {
+                            this.nextLevel();
+                        }
+                    }
+                });
+
+                // Проверка столкновений с врагами
+                this.enemies.forEach(enemy => {
+                    if (this.mermaid.x < enemy.x + enemy.width &&
+                        this.mermaid.x + this.mermaid.width > enemy.x &&
+                        this.mermaid.y < enemy.y + enemy.height &&
+                        this.mermaid.y + this.mermaid.height > enemy.y) {
+                        
+                        this.endGame(false);
+                    }
+                });
+            }
+
+            nextLevel() {
+                this.level++;
+                this.collectedFish = 0;
+                this.timeLeft = 60 + (this.level * 10);
+                document.getElementById('level').textContent = this.level;
+                document.getElementById('fishCount').textContent = this.collectedFish;
+                document.getElementById('timer').textContent = this.timeLeft;
+                this.createLevel();
+            }
+
+            endGame(success) {
+                this.gameRunning = false;
+                clearInterval(this.gameLoop);
+                clearInterval(this.timer);
+                
+                const gameOver = document.getElementById('gameOver');
+                const title = document.getElementById('gameOverTitle');
+                const message = document.getElementById('gameOverMessage');
+                
+                gameOver.style.display = 'block';
+                
+                if (success) {
+                    title.textContent = 'Победа! 🎉';
+                    message.textContent = `Вы спасли всех рыбок и прошли ${this.level} уровней!`;
+                } else {
+                    title.textContent = 'Игра окончена 😢';
+                    message.textContent = `Вы спасли ${this.collectedFish} из ${this.totalFish} рыбок. Попробуйте еще раз!`;
+                }
+            }
+
+            draw() {
+                // Очистка canvas
+                this.ctx.fillStyle = '#0a3d62';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                // Рисование фона (пузырьки)
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                for (let i = 0; i < 20; i++) {
+                    const x = (Date.now() / 100 + i * 50) % this.canvas.width;
+                    const y = (Math.sin(Date.now() / 1000 + i) * 50 + i * 40) % this.canvas.height;
+                    this.ctx.beginPath();
+                    this.ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+
+                // Рисование русалки
+                this.ctx.fillStyle = this.mermaid.color;
+                this.ctx.fillRect(this.mermaid.x, this.mermaid.y, this.mermaid.width, this.mermaid.height);
+                
+                // Хвост русалки
+                this.ctx.fillStyle = '#ff4081';
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.mermaid.x + this.mermaid.width, this.mermaid.y + this.mermaid.height/2);
+                this.ctx.lineTo(this.mermaid.x + this.mermaid.width + 20, this.mermaid.y);
+                this.ctx.lineTo(this.mermaid.x + this.mermaid.width + 20, this.mermaid.y + this.mermaid.height);
+                this.ctx.closePath();
+                this.ctx.fill();
+
+                // Рисование рыбок
+                this.fishes.forEach(fish => {
+                    if (!fish.collected) {
+                        this.ctx.fillStyle = fish.color;
+                        this.ctx.fillRect(fish.x, fish.y, fish.width, fish.height);
+                        
+                        // Хвост рыбки
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(fish.x, fish.y + fish.height/2);
+                        this.ctx.lineTo(fish.x - 10, fish.y);
+                        this.ctx.lineTo(fish.x - 10, fish.y + fish.height);
+                        this.ctx.closePath();
+                        this.ctx.fill();
+                    }
+                });
+
+                // Рисование врагов
+                this.enemies.forEach(enemy => {
+                    this.ctx.fillStyle = enemy.color;
+                    this.ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    
+                    // Плавники акулы
+                    this.ctx.fillRect(enemy.x + enemy.width - 10, enemy.y - 5, 5, 10);
+                    this.ctx.fillRect(enemy.x + enemy.width - 10, enemy.y + enemy.height - 5, 5, 10);
+                });
+
+                // Отображение сбора рыбок
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = '16px Arial';
+                this.ctx.fillText(`Рыбок: ${this.collectedFish}/${this.totalFish}`, 10, 25);
+                this.ctx.fillText(`Время: ${this.timeLeft}с`, 10, 50);
+                this.ctx.fillText(`Уровень: ${this.level}`, this.canvas.width - 100, 25);
+            }
+
+            pause() {
+                this.gamePaused = !this.gamePaused;
+                const btn = document.getElementById('pauseBtn');
+                btn.textContent = this.gamePaused ? '▶️ Продолжить' : '⏸️ Пауза';
+            }
+
+            restart() {
+                clearInterval(this.gameLoop);
+                clearInterval(this.timer);
+                this.collectedFish = 0;
+                this.timeLeft = 60;
+                this.level = 1;
+                this.mermaid.x = 50;
+                this.mermaid.y = 250;
+                document.getElementById('fishCount').textContent = '0';
+                document.getElementById('timer').textContent = '60';
+                document.getElementById('level').textContent = '1';
+                document.getElementById('gameOver').style.display = 'none';
+                this.gamePaused = false;
+                document.getElementById('pauseBtn').textContent = '⏸️ Пауза';
+                this.initializeGame();
+            }
+        }
+
+        let game;
+
+        function moveMermaid(direction) {
+            if (game && game.gameRunning && !game.gamePaused) {
+                switch(direction) {
+                    case 'left':
+                        game.mermaid.x = Math.max(0, game.mermaid.x - game.mermaid.speed);
+                        break;
+                    case 'right':
+                        game.mermaid.x = Math.min(game.canvas.width - game.mermaid.width, 
+                                                game.mermaid.x + game.mermaid.speed);
+                        break;
+                    case 'up':
+                        game.mermaid.y = Math.max(0, game.mermaid.y - game.mermaid.speed);
+                        break;
+                    case 'down':
+                        game.mermaid.y = Math.min(game.canvas.height - game.mermaid.height, 
+                                                game.mermaid.y + game.mermaid.speed);
+                        break;
+                }
+            }
+        }
+
+        function pauseGame() {
+            if (game) {
+                game.pause();
+            }
+        }
+
+        function restartGame() {
+            if (game) {
+                game.restart();
+            } else {
+                game = new MermaidGame();
+            }
+        }
+
+        // Запуск игры при загрузке страницы
+        window.onload = function() {
+            game = new MermaidGame();
+        };
+    </script>
+</body>
+</html>
